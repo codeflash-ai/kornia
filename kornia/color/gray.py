@@ -23,12 +23,12 @@ import torch
 
 from kornia.color.rgb import bgr_to_rgb
 from kornia.core import ImageModule as Module
-from kornia.core import Tensor, concatenate
+from kornia.core import Tensor
 from kornia.core.check import KORNIA_CHECK_IS_TENSOR
 
 
 def grayscale_to_rgb(image: Tensor) -> Tensor:
-    r"""Convert a grayscale image to RGB version of image.
+    r"""Convert a grayscale image to RGB version of the image.
 
     .. image:: _static/img/grayscale_to_rgb.png
 
@@ -46,11 +46,13 @@ def grayscale_to_rgb(image: Tensor) -> Tensor:
 
     """
     KORNIA_CHECK_IS_TENSOR(image)
+    shape = image.shape
 
-    if len(image.shape) < 3 or image.shape[-3] != 1:
-        raise ValueError(f"Input size must have a shape of (*, 1, H, W). Got {image.shape}.")
+    if len(shape) < 3 or shape[-3] != 1:
+        raise ValueError(f"Input size must have a shape of (*, 1, H, W). Got {shape}.")
 
-    return concatenate([image, image, image], -3)
+    # Directly return the repeated view to save memory and speed up computation
+    return image.expand(*shape[:-3], 3, *shape[-2:])
 
 
 def rgb_to_grayscale(image: Tensor, rgb_weights: Optional[Tensor] = None) -> Tensor:
