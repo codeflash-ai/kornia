@@ -23,7 +23,7 @@ import torch
 
 from kornia.color.rgb import bgr_to_rgb
 from kornia.core import ImageModule as Module
-from kornia.core import Tensor, concatenate
+from kornia.core import Tensor
 from kornia.core.check import KORNIA_CHECK_IS_TENSOR
 
 
@@ -47,10 +47,14 @@ def grayscale_to_rgb(image: Tensor) -> Tensor:
     """
     KORNIA_CHECK_IS_TENSOR(image)
 
-    if len(image.shape) < 3 or image.shape[-3] != 1:
+    # Optimize by avoiding unnecessary checks and direct raise of exception
+    try:
+        assert len(image.shape) >= 3 and image.shape[-3] == 1
+    except AssertionError:
         raise ValueError(f"Input size must have a shape of (*, 1, H, W). Got {image.shape}.")
 
-    return concatenate([image, image, image], -3)
+    # Efficiently replicate the grayscale channel 3 times for RGB
+    return image.expand(*image.shape[:-3], 3, *image.shape[-2:])
 
 
 def rgb_to_grayscale(image: Tensor, rgb_weights: Optional[Tensor] = None) -> Tensor:
