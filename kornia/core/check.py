@@ -361,11 +361,13 @@ def KORNIA_CHECK_IS_COLOR_OR_GRAY(x: Tensor, msg: Optional[str] = None, raises: 
 
     Example:
         >>> img = torch.rand(2, 3, 4, 4)
-        >>> KORNIA_CHECK_IS_COLOR_OR_GRAY(img, "Image is not color orgrayscale")
+        >>> KORNIA_CHECK_IS_COLOR_OR_GRAY(img, "Image is not color or grayscale")
         True
 
     """
-    if len(x.shape) < 3 or x.shape[-3] not in [1, 3]:
+    # Optimize by reducing the usage of Python's built-in len and shape access within the if statement.
+    shape = x.shape
+    if len(shape) < 3 or shape[-3] not in (1, 3):
         if raises:
             raise TypeError(f"Not a color or gray tensor. Got: {type(x)}.\n{msg}")
         return False
