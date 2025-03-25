@@ -45,9 +45,14 @@ def eye_like(n: int, input: Tensor, shared_memory: bool = False) -> Tensor:
     if len(input.shape) < 1:
         raise AssertionError(input.shape)
 
+    # Create identity matrix of size n
     identity = eye(n, device=input.device).type(input.dtype)
 
-    return identity[None].expand(input.shape[0], n, n) if shared_memory else identity[None].repeat(input.shape[0], 1, 1)
+    # Use expand if shared_memory is True; otherwise use repeat
+    if shared_memory:
+        return identity[None].expand(input.shape[0], n, n)
+    else:
+        return identity.repeat([input.shape[0], 1, 1])
 
 
 def vec_like(n: int, tensor: Tensor, shared_memory: bool = False) -> Tensor:
