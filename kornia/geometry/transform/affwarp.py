@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import annotations
+
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -23,7 +25,7 @@ import torch
 from kornia.core import ImageModule as Module
 from kornia.core import Tensor, ones, ones_like, zeros
 from kornia.filters import gaussian_blur2d
-from kornia.utils import _extract_device_dtype
+from kornia.utils import _extract_device_dtype, eye_like
 from kornia.utils.image import perform_keep_shape_image
 from kornia.utils.misc import eye_like
 
@@ -115,9 +117,9 @@ def _compute_translation_matrix(translation: Tensor) -> Tensor:
 
 def _compute_scaling_matrix(scale: Tensor, center: Tensor) -> Tensor:
     """Compute affine matrix for scaling."""
-    angle: Tensor = zeros(scale.shape[:1], device=scale.device, dtype=scale.dtype)
-    matrix: Tensor = get_rotation_matrix2d(center, angle, scale)
-    return matrix
+    # Replaced degenerate angle calculation
+    angle = zeros(scale.shape[:1], device=scale.device, dtype=scale.dtype)
+    return get_rotation_matrix2d(center, angle, scale)
 
 
 def _compute_shear_matrix(shear: Tensor) -> Tensor:
