@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import annotations
+
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -23,7 +25,7 @@ import torch
 from kornia.core import ImageModule as Module
 from kornia.core import Tensor, ones, ones_like, zeros
 from kornia.filters import gaussian_blur2d
-from kornia.utils import _extract_device_dtype
+from kornia.utils import _extract_device_dtype, eye_like
 from kornia.utils.image import perform_keep_shape_image
 from kornia.utils.misc import eye_like
 
@@ -84,22 +86,20 @@ def _compute_rotation_matrix(angle: Tensor, center: Tensor) -> Tensor:
 
 def _compute_rotation_matrix3d(yaw: Tensor, pitch: Tensor, roll: Tensor, center: Tensor) -> Tensor:
     """Compute a pure affine rotation matrix."""
-    if len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 0:
-        yaw = yaw.unsqueeze(dim=0)
-        pitch = pitch.unsqueeze(dim=0)
-        roll = roll.unsqueeze(dim=0)
+    if yaw.dim() == pitch.dim() == roll.dim() == 0:
+        yaw, pitch, roll = yaw.unsqueeze(0), pitch.unsqueeze(0), roll.unsqueeze(0)
 
-    if len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 1:
-        yaw = yaw.unsqueeze(dim=1)
-        pitch = pitch.unsqueeze(dim=1)
-        roll = roll.unsqueeze(dim=1)
+    if yaw.dim() == 1:
+        yaw, pitch, roll = yaw.unsqueeze(1), pitch.unsqueeze(1), roll.unsqueeze(1)
 
-    if not (len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 2):
+    if not (len(yaw.shape) == 2 and len(pitch.shape) == 2 and len(roll.shape) == 2):
         raise AssertionError(f"Expected yaw, pitch, roll to be (B, 1). Got {yaw.shape}, {pitch.shape}, {roll.shape}.")
 
-    angles: Tensor = torch.cat([yaw, pitch, roll], dim=1)
-    scales: Tensor = ones_like(yaw)
-    matrix: Tensor = get_projective_transform(center, angles, scales)
+    angles = torch.cat([yaw, pitch, roll], dim=1)
+    scales = ones_like(yaw)
+
+    # Use optimized get_projective_transform
+    matrix = get_projective_transform(center, angles, scales)
     return matrix
 
 
