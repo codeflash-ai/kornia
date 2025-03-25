@@ -117,19 +117,16 @@ def inverse_transformation(trans_12: Tensor) -> Tensor:
 
     if not ((trans_12.dim() in (2, 3)) and (trans_12.shape[-2:] == (4, 4))):
         raise ValueError(f"Input size must be a Nx4x4 or 4x4. Got {trans_12.shape}")
-    # unpack input tensor
-    rmat_12 = trans_12[..., :3, 0:3]  # Nx3x3
-    tvec_12 = trans_12[..., :3, 3:4]  # Nx3x1
 
-    # compute the actual inverse
-    rmat_21 = torch.transpose(rmat_12, -1, -2)
-    tvec_21 = torch.matmul(-rmat_21, tvec_12)
+    # Optimized unpacking and computation using more in-place operations
+    rmat_21 = trans_12[..., :3, 0:3].transpose(-1, -2)  # In-place transpose
+    tvec_21 = -torch.matmul(rmat_21, trans_12[..., :3, 3:4])  # Combine operations
 
-    # pack to output tensor
+    # Pack to output tensor more efficiently
     trans_21 = zeros_like(trans_12)
-    trans_21[..., :3, 0:3] += rmat_21
-    trans_21[..., :3, -1:] += tvec_21
-    trans_21[..., -1, -1:] += 1.0
+    trans_21[..., :3, :3] = rmat_21
+    trans_21[..., :3, 3:4] = tvec_21
+    trans_21[..., 3, 3] = 1.0
     return trans_21
 
 
