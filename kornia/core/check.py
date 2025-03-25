@@ -341,7 +341,11 @@ def KORNIA_CHECK_IS_GRAY(x: Tensor, msg: Optional[str] = None, raises: bool = Tr
         True
 
     """
-    if len(x.shape) < 2 or (len(x.shape) >= 3 and x.shape[-3] != 1):
+    # Optimize by minimizing the number of conditions checked
+    num_dims = len(x.shape)
+
+    # Direct check for valid grayscale shape for better performance
+    if not (num_dims == 2 or (num_dims >= 3 and x.shape[-3] == 1)):
         if raises:
             raise TypeError(f"Not a gray tensor. Got: {type(x)}.\n{msg}")
         return False
