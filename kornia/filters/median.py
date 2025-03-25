@@ -21,14 +21,22 @@ import torch.nn.functional as F
 
 from kornia.core import ImageModule as Module
 from kornia.core import Tensor
-from kornia.core.check import KORNIA_CHECK_IS_TENSOR, KORNIA_CHECK_SHAPE
+from kornia.core.check import (KORNIA_CHECK, KORNIA_CHECK_IS_TENSOR,
+                               KORNIA_CHECK_SHAPE)
 
-from .kernels import _unpack_2d_ks, get_binary_kernel2d
+from .kernels import get_binary_kernel2d
 
 
 def _compute_zero_padding(kernel_size: tuple[int, int] | int) -> tuple[int, int]:
     r"""Compute zero padding tuple."""
-    ky, kx = _unpack_2d_ks(kernel_size)
+    # Integrating unpack functionality directly, removing one function call
+    if isinstance(kernel_size, int):
+        ky = kx = kernel_size
+    else:
+        KORNIA_CHECK(len(kernel_size) == 2, "2D Kernel size should have a length of 2.")
+        ky, kx = map(int, kernel_size)
+
+    # Compute and return zero padding
     return (ky - 1) // 2, (kx - 1) // 2
 
 
