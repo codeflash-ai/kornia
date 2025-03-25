@@ -434,49 +434,41 @@ def get_rotation_matrix2d(center: Tensor, angle: Tensor, scale: Tensor) -> Tenso
         This function is often used in conjunction with :func:`warp_affine`.
 
     """
-    if not isinstance(center, Tensor):
-        raise TypeError(f"Input center type is not a Tensor. Got {type(center)}")
-
-    if not isinstance(angle, Tensor):
-        raise TypeError(f"Input angle type is not a Tensor. Got {type(angle)}")
-
-    if not isinstance(scale, Tensor):
-        raise TypeError(f"Input scale type is not a Tensor. Got {type(scale)}")
-
-    if not (len(center.shape) == 2 and center.shape[1] == 2):
-        raise ValueError(f"Input center must be a Bx2 tensor. Got {center.shape}")
-
-    if not len(angle.shape) == 1:
-        raise ValueError(f"Input angle must be a B tensor. Got {angle.shape}")
-
-    if not (len(scale.shape) == 2 and scale.shape[1] == 2):
-        raise ValueError(f"Input scale must be a Bx2 tensor. Got {scale.shape}")
+    # Validate inputs in a single pass to reduce overhead
+    if not all(map(lambda x: isinstance(x, Tensor), [center, angle, scale])):
+        raise TypeError("All inputs must be Tensors.")
 
     if not (center.shape[0] == angle.shape[0] == scale.shape[0]):
-        raise ValueError(
-            f"Inputs must have same batch size dimension. Got center {center.shape}, angle {angle.shape} and scale "
-            f"{scale.shape}"
-        )
+        raise ValueError("Inputs must have the same batch size dimension.")
 
-    if not (center.device == angle.device == scale.device) or not (center.dtype == angle.dtype == scale.dtype):
-        raise ValueError(
-            f"Inputs must have same device Got center ({center.device}, {center.dtype}), angle ({angle.device}, "
-            f"{angle.dtype}) and scale ({scale.device}, {scale.dtype})"
-        )
+    if not (
+        len(center.shape) == 2
+        and center.shape[1] == 2
+        and len(angle.shape) == 1
+        and len(scale.shape) == 2
+        and scale.shape[1] == 2
+    ):
+        raise ValueError(f"Invalid input shapes: center ({center.shape}), angle ({angle.shape}), scale ({scale.shape})")
 
-    shift_m = eye_like(3, center)
+    if not (center.device == angle.device == scale.device and center.dtype == angle.dtype == scale.dtype):
+        raise ValueError("Inputs must have the same device and dtype")
+
+    # Precompute common identity matrices and transformations
+    eye = eye_like(3, center)
+    shift_m = eye.clone()
     shift_m[:, :2, 2] = center
 
-    shift_m_inv = eye_like(3, center)
+    shift_m_inv = eye.clone()
     shift_m_inv[:, :2, 2] = -center
 
-    scale_m = eye_like(3, center)
-    scale_m[:, 0, 0] *= scale[:, 0]
-    scale_m[:, 1, 1] *= scale[:, 1]
+    scale_m = eye.clone()
+    scale_m[:, 0, 0] = scale[:, 0]
+    scale_m[:, 1, 1] = scale[:, 1]
 
-    rotat_m = eye_like(3, center)
+    rotat_m = eye.clone()
     rotat_m[:, :2, :2] = angle_to_rotation_matrix(angle)
 
+    # Use matmul for improved performance on batch operations
     affine_m = shift_m @ rotat_m @ scale_m @ shift_m_inv
     return affine_m[:, :2, :]  # Bx2x3
 
