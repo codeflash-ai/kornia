@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from __future__ import annotations
+
 import math
 from typing import Dict, List, Tuple
 
@@ -422,21 +424,22 @@ def sample_lengths(
     """Sample points along the length of rays."""
     if num_ray_points <= 1:
         raise ValueError("Number of ray points must be greater than 1")
+    zero_to_one = torch.linspace(0.0, 1.0, num_ray_points + int(irregular), device=device, dtype=dtype)
+
     if not irregular:
-        zero_to_one = torch.linspace(0.0, 1.0, num_ray_points, device=device, dtype=dtype)
-        lengths = zero_to_one.repeat(num_rays, 1)  # FIXME: Expand instead of repeat maybe?
+        # Expand is used instead of repeat for performance boost
+        lengths = zero_to_one[: -int(irregular)].expand(num_rays, -1).clone()
     else:
-        zero_to_one = torch.linspace(0.0, 1.0, num_ray_points + 1, device=device, dtype=dtype)
-        lengths = torch.rand(num_rays, num_ray_points, device=device) / num_ray_points + zero_to_one[:-1]
+        rand_offset = torch.rand(num_rays, num_ray_points, device=device) / num_ray_points
+        lengths = rand_offset + zero_to_one[:-1].unsqueeze(0)
+
     return lengths
 
 
 # TODO: Implement hierarchical ray sampling as described in Mildenhall (2020) Sec. 5.2
 
 
-def sample_ray_points(
-    origins: Tensor, directions: Tensor, lengths: Tensor
-) -> Tensor:  # FIXME: Test by projecting to points_2d and compare with sampler 2d points
+def sample_ray_points(origins: Tensor, directions: Tensor, lengths: Tensor) -> Tensor:
     r"""Sample points along ray.
 
     Args:
@@ -448,7 +451,7 @@ def sample_ray_points(
         points_3d: Points along rays :math:`(*, num_ray_points, 3)`
 
     """
-    points_3d = origins[..., None, :] + lengths[..., None] * directions[..., None, :]
+    points_3d = origins[..., None, :] + lengths[..., :, None] * directions[..., None, :]
     return points_3d
 
 
