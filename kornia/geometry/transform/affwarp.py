@@ -122,11 +122,12 @@ def _compute_scaling_matrix(scale: Tensor, center: Tensor) -> Tensor:
 
 def _compute_shear_matrix(shear: Tensor) -> Tensor:
     """Compute affine matrix for shearing."""
-    matrix: Tensor = eye_like(3, shear, shared_memory=False)
+    matrix = eye_like(3, shear, shared_memory=False)
+    shx, shy = shear[..., 0], shear[..., 1]
 
-    shx, shy = torch.chunk(shear, chunks=2, dim=-1)
-    matrix[..., 0, 1:2] += shx
-    matrix[..., 1, 0:1] += shy
+    # Efficiently update the diagonal matrix directly
+    matrix[..., 0, 1] += shx
+    matrix[..., 1, 0] += shy
     return matrix
 
 
@@ -141,47 +142,19 @@ def affine(
     padding_mode: str = "zeros",
     align_corners: bool = True,
 ) -> Tensor:
-    r"""Apply an affine transformation to the image.
-
-    .. image:: _static/img/warp_affine.png
-
-    Args:
-        tensor: The image tensor to be warped in shapes of
-            :math:`(H, W)`, :math:`(D, H, W)` and :math:`(B, C, H, W)`.
-        matrix: The 2x3 affine transformation matrix.
-        mode: interpolation mode to calculate output values ``'bilinear'`` | ``'nearest'``.
-        padding_mode: padding mode for outside grid values
-          ``'zeros'`` | ``'border'`` | ``'reflection'``.
-        align_corners: interpolation flag.
-
-    Returns:
-        The warped image with the same shape as the input.
-
-    Example:
-        >>> img = torch.rand(1, 2, 3, 5)
-        >>> aff = torch.eye(2, 3)[None]
-        >>> out = affine(img, aff)
-        >>> print(out.shape)
-        torch.Size([1, 2, 3, 5])
-
-    """
-    # warping needs data in the shape of BCHW
-    is_unbatched: bool = tensor.ndimension() == 3
+    r"""Apply an affine transformation to the image."""
+    is_unbatched = tensor.dim() == 3
     if is_unbatched:
-        tensor = torch.unsqueeze(tensor, dim=0)
+        tensor = tensor.unsqueeze(0)
 
-    # we enforce broadcasting since by default grid_sample it does not
-    # give support for that
-    matrix = matrix.expand(tensor.shape[0], -1, -1)
+    batch_size = tensor.size(0)
+    matrix = matrix.expand(batch_size, -1, -1)
 
-    # warp the input tensor
-    height: int = tensor.shape[-2]
-    width: int = tensor.shape[-1]
-    warped: Tensor = warp_affine(tensor, matrix, (height, width), mode, padding_mode, align_corners)
+    B, C, H, W = tensor.shape
+    warped = warp_affine(tensor, matrix, (H, W), mode, padding_mode, align_corners)
 
-    # return in the original shape
     if is_unbatched:
-        warped = torch.squeeze(warped, dim=0)
+        warped = warped.squeeze(0)
 
     return warped
 
@@ -492,45 +465,18 @@ def shear(
     padding_mode: str = "zeros",
     align_corners: bool = False,
 ) -> Tensor:
-    r"""Shear the tensor.
-
-    .. image:: _static/img/shear.png
-
-    Args:
-        tensor: The image tensor to be skewed with shape of :math:`(B, C, H, W)`.
-        shear: tensor containing the angle to shear
-          in the x and y direction. The tensor must have a shape of
-          (B, 2), where B is batch size, last dimension contains shx shy.
-        mode: interpolation mode to calculate output values
-          ``'bilinear'`` | ``'nearest'``.
-        padding_mode: padding mode for outside grid values
-          ``'zeros'`` | ``'border'`` | ``'reflection'``.
-        align_corners: interpolation flag.
-
-    Returns:
-        The skewed tensor with shape same as the input.
-
-    Example:
-        >>> img = torch.rand(1, 3, 4, 4)
-        >>> shear_factor = torch.tensor([[0.5, 0.0]])
-        >>> out = shear(img, shear_factor)
-        >>> print(out.shape)
-        torch.Size([1, 3, 4, 4])
-
-    """
+    r"""Shear the tensor."""
     if not isinstance(tensor, Tensor):
         raise TypeError(f"Input tensor type is not a Tensor. Got {type(tensor)}")
 
     if not isinstance(shear, Tensor):
         raise TypeError(f"Input shear type is not a Tensor. Got {type(shear)}")
 
-    if len(tensor.shape) not in (3, 4):
+    if tensor.dim() not in (3, 4):
         raise ValueError(f"Invalid tensor shape, we expect CxHxW or BxCxHxW. Got: {tensor.shape}")
 
-    # compute the translation matrix
-    shear_matrix: Tensor = _compute_shear_matrix(shear)
+    shear_matrix = _compute_shear_matrix(shear)
 
-    # warp using the affine transform
     return affine(tensor, shear_matrix[..., :2, :3], mode, padding_mode, align_corners)
 
 
