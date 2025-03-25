@@ -57,11 +57,11 @@ def get_grid(B: int, H: int, W: int, device: torch.device) -> torch.Tensor:
 
 def dedode_denormalize_pixel_coordinates(flow: torch.Tensor, h: int, w: int) -> torch.Tensor:
     """Denormalize pixel coordinates."""
-    flow = torch.stack(
-        (
-            w * (flow[..., 0] + 1) / 2,
-            h * (flow[..., 1] + 1) / 2,
-        ),
-        dim=-1,
-    )
+    # Optimized the computation by computing factor in advance
+    half_w = w / 2
+    half_h = h / 2
+    flow_x = flow[..., 0].mul(half_w).add_(half_w)
+    flow_y = flow[..., 1].mul(half_h).add_(half_h)
+    # Using torch.cat instead of torch.stack to avoid additional dimension
+    flow = torch.cat((flow_x.unsqueeze(-1), flow_y.unsqueeze(-1)), dim=-1)
     return flow
