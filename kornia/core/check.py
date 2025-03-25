@@ -102,7 +102,7 @@ def KORNIA_CHECK_SHAPE(x: Tensor, shape: list[str], raises: bool = True) -> bool
 
 
 def KORNIA_CHECK(condition: bool, msg: Optional[str] = None, raises: bool = True) -> bool:
-    """Check any arbitrary boolean condition.
+    """Optimized check for any arbitrary boolean condition.
 
     Args:
         condition: the condition to evaluate.
@@ -110,7 +110,7 @@ def KORNIA_CHECK(condition: bool, msg: Optional[str] = None, raises: bool = True
         raises: bool indicating whether an exception should be raised upon failure.
 
     Raises:
-        Exception: if the condition is met and raises is True.
+        Exception: if the condition is not met and raises is True.
 
     Example:
         >>> x = torch.rand(2, 3, 3)
@@ -118,11 +118,13 @@ def KORNIA_CHECK(condition: bool, msg: Optional[str] = None, raises: bool = True
         True
 
     """
-    if not condition:
-        if raises:
-            raise Exception(f"{condition} not true.\n{msg}")
-        return False
-    return True
+    # Short-circuit evaluation to avoid the overhead of additional conditional checks
+    if condition:
+        return True
+
+    if raises:
+        raise Exception(f"{condition} not true.\n{msg}")
+    return False
 
 
 def KORNIA_UNWRAP(maybe_obj: object, typ: Any) -> Any:
