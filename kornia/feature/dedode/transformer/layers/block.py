@@ -129,24 +129,33 @@ def drop_add_residual_stochastic_depth(
     residual_func: Callable[[Tensor], Tensor],
     sample_drop_ratio: float = 0.0,
 ) -> Tensor:
-    """Add residual connection."""
-    # 1) extract subset using permutation
+    """Add residual connection with stochastic depth."""
+    # 1) Determine the subset size based on sample_drop_ratio
     b, n, d = x.shape
     sample_subset_size = max(int(b * (1 - sample_drop_ratio)), 1)
-    brange = (torch.randperm(b, device=x.device))[:sample_subset_size]
-    x_subset = x[brange]
+    if sample_subset_size < b:
+        # 2) Extract subset using permutation only if necessary
+        brange = torch.randperm(b, device=x.device)[:sample_subset_size]
+        x_subset = x[brange]
+    else:
+        x_subset = x  # If sample_subset_size is b, use x directly
 
-    # 2) apply residual_func to get residual
+    # 3) Apply residual_func to compute the residual
     residual = residual_func(x_subset)
 
-    x_flat = x.flatten(1)
-    residual = residual.flatten(1)
-
+    # 4) Add the residual
     residual_scale_factor = b / sample_subset_size
 
-    # 3) add the residual
-    x_plus_residual = torch.index_add(x_flat, 0, brange, residual.to(dtype=x.dtype), alpha=residual_scale_factor)
-    return x_plus_residual.view_as(x)
+    if sample_subset_size < b:
+        # Flatten only once and use in-place add for efficiency
+        x.view(b, -1).index_add_(
+            0, brange, residual.view(sample_subset_size, -1).to(dtype=x.dtype), alpha=residual_scale_factor
+        )
+    else:
+        # Use in-place addition if no sampling occurred
+        x.add_(residual.to(dtype=x.dtype), alpha=residual_scale_factor)
+
+    return x
 
 
 def get_branges_scales(x, sample_drop_ratio=0.0):
