@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
+from __future__ import annotations
+
 from typing import List
 
 from kornia.core import Module, Tensor, pad
-from kornia.core.check import KORNIA_CHECK, KORNIA_CHECK_IS_TENSOR, KORNIA_CHECK_SHAPE
+from kornia.core.check import (KORNIA_CHECK, KORNIA_CHECK_IS_TENSOR,
+                               KORNIA_CHECK_SHAPE)
 from kornia.filters import filter3d, get_gaussian_kernel3d
 from kornia.filters.filter import _compute_padding
 
@@ -92,9 +95,18 @@ def ssim3d(
     C1: float = (0.01 * max_val) ** 2
     C2: float = (0.03 * max_val) ** 2
 
-    # compute local mean per channel
-    mu1: Tensor = filter3d(img1, kernel)
-    mu2: Tensor = filter3d(img2, kernel)
+    # Optimize by computing all filters at once
+    img1_sq = img1**2
+    img2_sq = img2**2
+    img1_img2 = img1 * img2
+
+    mu1, mu2, mu_img1_sq, mu_img2_sq, mu_img1_img2 = (
+        filter3d(img1, kernel),
+        filter3d(img2, kernel),
+        filter3d(img1_sq, kernel),
+        filter3d(img2_sq, kernel),
+        filter3d(img1_img2, kernel),
+    )
 
     cropping_shape: List[int] = []
     if padding == "valid":
@@ -102,23 +114,12 @@ def ssim3d(
         cropping_shape = _compute_padding([depth, height, width])
         mu1 = _crop(mu1, cropping_shape)
         mu2 = _crop(mu2, cropping_shape)
-    elif padding == "same":
-        pass
-
-    mu1_sq = mu1**2
-    mu2_sq = mu2**2
-    mu1_mu2 = mu1 * mu2
-
-    mu_img1_sq = filter3d(img1**2, kernel)
-    mu_img2_sq = filter3d(img2**2, kernel)
-    mu_img1_img2 = filter3d(img1 * img2, kernel)
-
-    if padding == "valid":
         mu_img1_sq = _crop(mu_img1_sq, cropping_shape)
         mu_img2_sq = _crop(mu_img2_sq, cropping_shape)
         mu_img1_img2 = _crop(mu_img1_img2, cropping_shape)
-    elif padding == "same":
-        pass
+
+    mu1_sq, mu2_sq = mu1**2, mu2**2
+    mu1_mu2 = mu1 * mu2
 
     # compute local sigma per channel
     sigma1_sq = mu_img1_sq - mu1_sq
