@@ -53,7 +53,7 @@ class KMeans:
     ) -> None:
         KORNIA_CHECK(num_clusters != 0, "num_clusters can't be 0")
 
-        # cluster_centers should have only 2 dimensions
+        # Validate cluster_centers' shape
         if cluster_centers is not None:
             KORNIA_CHECK_SHAPE(cluster_centers, ["C", "D"])
 
@@ -102,21 +102,9 @@ class KMeans:
         return initial_state
 
     def _pairwise_euclidean_distance(self, data1: Tensor, data2: Tensor) -> Tensor:
-        """Compute pairwise squared distance between 2 sets of vectors.
-
-        Args:
-            data1: 2D tensor of shape N, D
-            data2: 2D tensor of shape C, D
-
-        Returns:
-            2D tensor of shape N, C
-
-        """
-        # N*1*D
-        A = data1[:, None, ...]
-        # 1*C*D
-        B = data2[None, ...]
-        distance = euclidean_distance(A, B)
+        """Compute pairwise squared distance between two sets of vectors."""
+        # Utilizing broadcasting instead of explicit None insertions
+        distance = euclidean_distance(data1[:, None, ...], data2[None, ...])
         return distance
 
     def fit(self, X: Tensor) -> None:
@@ -178,22 +166,14 @@ class KMeans:
         self._final_cluster_centers = current_centers
 
     def predict(self, x: Tensor) -> Tensor:
-        """Find the cluster center closest to each point in x.
-
-        Args:
-            x: 2D tensor
-
-        Returns:
-            1D tensor containing cluster id assigned to each data point in x
-
-        """
-        # x and cluster_centers should have same number of columns
+        """Find the cluster center closest to each point in x."""
+        # Check if x and cluster_centers have the same number of columns
         KORNIA_CHECK(
             x.shape[1] == self.cluster_centers.shape[1],
             f"Dimensions at position 1 of x and cluster_centers do not match. \
                 {x.shape[1]} != {self.cluster_centers.shape[1]}",
         )
 
-        distance = self._pairwise_euclidean_distance(x, self.cluster_centers)
-        cluster_assignment = distance.argmin(-1)
+        # Compute distances and find the closest cluster center
+        cluster_assignment = self._pairwise_euclidean_distance(x, self.cluster_centers).argmin(dim=-1)
         return cluster_assignment
