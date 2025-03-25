@@ -107,9 +107,11 @@ def _compute_translation_matrix(translation: Tensor) -> Tensor:
     """Compute affine matrix for translation."""
     matrix: Tensor = eye_like(3, translation, shared_memory=False)
 
+    # Updated to use in-place operations for efficiency
     dx, dy = torch.chunk(translation, chunks=2, dim=-1)
-    matrix[..., 0, 2:3] += dx
-    matrix[..., 1, 2:3] += dy
+    matrix[..., 0, 2:3].add_(dx)
+    matrix[..., 1, 2:3].add_(dy)
+
     return matrix
 
 
