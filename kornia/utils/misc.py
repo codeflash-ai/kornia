@@ -45,9 +45,16 @@ def eye_like(n: int, input: Tensor, shared_memory: bool = False) -> Tensor:
     if len(input.shape) < 1:
         raise AssertionError(input.shape)
 
-    identity = eye(n, device=input.device).type(input.dtype)
+    # Optimize by avoiding type conversion if not necessary
+    identity = eye(n, device=input.device)
+    if identity.dtype != input.dtype:
+        identity = identity.type(input.dtype)
 
-    return identity[None].expand(input.shape[0], n, n) if shared_memory else identity[None].repeat(input.shape[0], 1, 1)
+    # Optimize batch size handling by avoiding repeat when shared_memory is True
+    identity_batched = identity[None]
+    batch_size = input.shape[0]
+
+    return identity_batched.expand(batch_size, n, n) if shared_memory else identity_batched.repeat(batch_size, 1, 1)
 
 
 def vec_like(n: int, tensor: Tensor, shared_memory: bool = False) -> Tensor:
