@@ -62,22 +62,18 @@ def ssim3d_loss(
         >>> loss = ssim3d_loss(input1, input2, 5)
 
     """
-    # compute the ssim map
-    ssim_map: Tensor = metrics.ssim3d(img1, img2, window_size, max_val, eps, padding)
+    # Compute SSIM and immediately calculate 1 - SSIM
+    ssim_map: Tensor = 1.0 - metrics.ssim3d(img1, img2, window_size, max_val, eps, padding)
 
-    # compute and reduce the loss
-    loss = 1.0 - ssim_map
-
+    # Reduce the loss based on the reduction method
     if reduction == "mean":
-        loss = loss.mean()
+        return ssim_map.mean()
     elif reduction == "sum":
-        loss = loss.sum()
+        return ssim_map.sum()
     elif reduction == "none":
-        pass
+        return ssim_map
     else:
         raise NotImplementedError("Invalid reduction option.")
-
-    return loss
 
 
 class SSIM3DLoss(Module):
@@ -117,11 +113,12 @@ class SSIM3DLoss(Module):
         self, window_size: int, max_val: float = 1.0, eps: float = 1e-12, reduction: str = "mean", padding: str = "same"
     ) -> None:
         super().__init__()
-        self.window_size: int = window_size
-        self.max_val: float = max_val
-        self.eps: float = eps
-        self.reduction: str = reduction
-        self.padding: str = padding
+        self.window_size = window_size
+        self.max_val = max_val
+        self.eps = eps
+        self.reduction = reduction
+        self.padding = padding
 
     def forward(self, img1: Tensor, img2: Tensor) -> Tensor:
+        # Call ssim3d_loss function for forward pass
         return ssim3d_loss(img1, img2, self.window_size, self.max_val, self.eps, self.reduction, self.padding)
