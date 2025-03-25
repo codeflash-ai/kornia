@@ -266,10 +266,16 @@ def KORNIA_CHECK_SAME_DEVICES(tensors: list[Tensor], msg: Optional[str] = None, 
         True
 
     """
-    KORNIA_CHECK(isinstance(tensors, list) and len(tensors) >= 1, "Expected a list with at least one element", raises)
-    if not all(tensors[0].device == x.device for x in tensors):
+    # Optimized by moving the validation for the list length check before iterating over the tensors
+    if not (isinstance(tensors, list) and len(tensors) >= 1):
         if raises:
-            raise Exception(f"Not same device for tensors. Got: {[x.device for x in tensors]}.\n{msg}")
+            raise Exception("Expected a list with at least one element.\n" + msg if msg else "")
+        return False
+
+    first_device = tensors[0].device
+    if not all(t.device == first_device for t in tensors):
+        if raises:
+            raise Exception(f"Not all tensors are on the same device. Got: {[t.device for t in tensors]}.\n{msg}")
         return False
     return True
 
