@@ -275,27 +275,26 @@ def KORNIA_CHECK_SAME_DEVICES(tensors: list[Tensor], msg: Optional[str] = None, 
 
 
 def KORNIA_CHECK_SAME_SHAPE(x: Tensor, y: Tensor, raises: bool = True) -> bool:
-    """Check whether two tensor have the same shape.
+    """Check whether two tensors have the same shape.
 
     Args:
         x: first tensor to evaluate.
-        y: sencod tensor to evaluate.
-        msg: message to show in the exception.
+        y: second tensor to evaluate.
         raises: bool indicating whether an exception should be raised upon failure.
 
     Raises:
-        TypeException: if the two tensors have not the same shape and raises is True.
+        TypeError: if the two tensors do not have the same shape and raises is True.
 
     Example:
         >>> x1 = torch.rand(2, 3, 3)
         >>> x2 = torch.rand(2, 3, 3)
         >>> KORNIA_CHECK_SAME_SHAPE(x1, x2)
         True
-
     """
-    if x.shape != y.shape:
+    x_shape, y_shape = x.shape, y.shape
+    if x_shape != y_shape:
         if raises:
-            raise TypeError(f"Not same shape for tensors. Got: {x.shape} and {y.shape}")
+            raise TypeError(f"Not same shape for tensors. Got: {x_shape} and {y_shape}")
         return False
     return True
 
