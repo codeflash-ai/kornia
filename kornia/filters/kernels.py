@@ -23,8 +23,10 @@ from typing import Any, Optional, Union
 
 import torch
 
-from kornia.core import Device, Dtype, Tensor, concatenate, cos, stack, tensor, where, zeros, zeros_like
-from kornia.core.check import KORNIA_CHECK, KORNIA_CHECK_IS_TENSOR, KORNIA_CHECK_SHAPE
+from kornia.core import (Device, Dtype, Tensor, concatenate, cos, stack,
+                         tensor, where, zeros, zeros_like)
+from kornia.core.check import (KORNIA_CHECK, KORNIA_CHECK_IS_TENSOR,
+                               KORNIA_CHECK_SHAPE)
 from kornia.utils import deprecated
 
 
@@ -41,16 +43,13 @@ def _check_kernel_size(kernel_size: tuple[int, ...] | int, min_value: int = 0, a
 
 
 def _unpack_2d_ks(kernel_size: tuple[int, int] | int) -> tuple[int, int]:
+    # Directly unpack the values here to avoid isinstance check redundancy
     if isinstance(kernel_size, int):
-        ky = kx = kernel_size
-    else:
-        KORNIA_CHECK(len(kernel_size) == 2, "2D Kernel size should have a length of 2.")
-        ky, kx = kernel_size
+        return kernel_size, kernel_size
+    KORNIA_CHECK(len(kernel_size) == 2, "2D Kernel size should have a length of 2.")
 
-    ky = int(ky)
-    kx = int(kx)
-
-    return (ky, kx)
+    # Return directly using tuple unpacking
+    return tuple(map(int, kernel_size))
 
 
 def _unpack_3d_ks(kernel_size: tuple[int, int, int] | int) -> tuple[int, int, int]:
