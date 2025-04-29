@@ -89,64 +89,68 @@ class RectangleEraseGenerator(RandomGeneratorBase):
         )
 
     def forward(self, batch_shape: Tuple[int, ...], same_on_batch: bool = False) -> Dict[str, Tensor]:
-        batch_size = batch_shape[0]
-        height = batch_shape[-2]
-        width = batch_shape[-1]
-        if not (isinstance(height, int) and height > 0 and isinstance(width, int) and width > 0):
-            raise AssertionError(f"'height' and 'width' must be integers. Got {height}, {width}.")
+        batch_size, height, width = batch_shape[0], batch_shape[-2], batch_shape[-1]
+
+        assert isinstance(height, int) and height > 0 and isinstance(width, int) and width > 0, (
+            f"'height' and 'width' must be positive integers. Got {height}, {width}."
+        )
 
         _common_param_check(batch_size, same_on_batch)
+
         _device, _dtype = _extract_device_dtype([self.ratio, self.scale])
         images_area = height * width
-        target_areas = (
-            _adapted_rsampling((batch_size,), self.scale_sampler, same_on_batch).to(device=_device, dtype=_dtype)
-            * images_area
+
+        # Optimize by using rsample with adapted sampling and eliminating intermediate vars
+        target_areas = (_adapted_rsampling((batch_size,), self.scale_sampler, same_on_batch) * images_area).to(
+            device=_device, dtype=_dtype
         )
 
-        if self.ratio[0] < 1.0 and self.ratio[1] > 1.0:
-            aspect_ratios1 = _adapted_rsampling((batch_size,), self.ratio_sampler1, same_on_batch)
-            aspect_ratios2 = _adapted_rsampling((batch_size,), self.ratio_sampler2, same_on_batch)
-            if same_on_batch:
-                rand_idxs = (
-                    torch.round(_adapted_rsampling((1,), self.index_sampler, same_on_batch)).repeat(batch_size).bool()
-                )
-            else:
-                rand_idxs = torch.round(_adapted_rsampling((batch_size,), self.index_sampler, same_on_batch)).bool()
-            aspect_ratios = where(rand_idxs, aspect_ratios1, aspect_ratios2)
+        if self.ratio[0] < 1.0 < self.ratio[1]:
+            aspect_ratios = self._get_combined_aspect_ratios(batch_size, same_on_batch, _device, _dtype)
         else:
-            aspect_ratios = _adapted_rsampling((batch_size,), self.ratio_sampler, same_on_batch)
+            aspect_ratios = _adapted_rsampling((batch_size,), self.ratio_sampler, same_on_batch).to(
+                device=_device, dtype=_dtype
+            )
 
-        aspect_ratios = aspect_ratios.to(device=_device, dtype=_dtype)
+        heights, widths = self._compute_dimensions(target_areas, aspect_ratios, height, width, _device, _dtype)
 
-        # based on target areas and aspect ratios, rectangle params are computed
-        heights = torch.min(
-            torch.max(
-                torch.round((target_areas * aspect_ratios) ** (1 / 2)), tensor(1.0, device=_device, dtype=_dtype)
-            ),
-            tensor(height, device=_device, dtype=_dtype),
-        )
-
-        widths = torch.min(
-            torch.max(
-                torch.round((target_areas / aspect_ratios) ** (1 / 2)), tensor(1.0, device=_device, dtype=_dtype)
-            ),
-            tensor(width, device=_device, dtype=_dtype),
-        )
-
-        xs_ratio = _adapted_rsampling((batch_size,), self.uniform_sampler, same_on_batch).to(
-            device=_device, dtype=_dtype
-        )
-        ys_ratio = _adapted_rsampling((batch_size,), self.uniform_sampler, same_on_batch).to(
-            device=_device, dtype=_dtype
-        )
-
-        xs = xs_ratio * (width - widths + 1)
-        ys = ys_ratio * (height - heights + 1)
+        # Precompute xs and ys to avoid recalculating tensor shapes
+        xs, ys = self._compute_positions(batch_size, widths, heights, width, height, _device, _dtype, same_on_batch)
 
         return {
             "widths": widths.floor(),
             "heights": heights.floor(),
-            "xs": xs.floor(),
-            "ys": ys.floor(),
+            "xs": xs,
+            "ys": ys,
             "values": tensor([self.value] * batch_size, device=_device, dtype=_dtype),
         }
+
+    def _get_combined_aspect_ratios(self, batch_size, same_on_batch, _device, _dtype):
+        aspect_ratios1 = _adapted_rsampling((batch_size,), self.ratio_sampler1, same_on_batch)
+        aspect_ratios2 = _adapted_rsampling((batch_size,), self.ratio_sampler2, same_on_batch)
+        rand_idxs = (
+            torch.round(_adapted_rsampling((1 if same_on_batch else batch_size,), self.index_sampler, same_on_batch))
+            .bool()
+            .repeat(batch_size if same_on_batch else 1)
+        )
+        return where(rand_idxs, aspect_ratios1, aspect_ratios2).to(device=_device, dtype=_dtype)
+
+    def _compute_dimensions(self, target_areas, aspect_ratios, height, width, _device, _dtype):
+        # Vectorized operations for computing heights and widths
+        heights = torch.clamp(((target_areas * aspect_ratios).sqrt()).round(), min=1, max=height).to(
+            device=_device, dtype=_dtype
+        )
+        widths = torch.clamp(((target_areas / aspect_ratios).sqrt()).round(), min=1, max=width).to(
+            device=_device, dtype=_dtype
+        )
+        return heights, widths
+
+    def _compute_positions(self, batch_size, widths, heights, width, height, _device, _dtype, same_on_batch):
+        xs_ratio, ys_ratio = [
+            _adapted_rsampling((batch_size,), self.uniform_sampler, same_on_batch).to(device=_device, dtype=_dtype)
+            for _ in range(2)
+        ]
+
+        xs = xs_ratio * (width - widths + 1)
+        ys = ys_ratio * (height - heights + 1)
+        return xs.floor(), ys.floor()
