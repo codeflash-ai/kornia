@@ -68,10 +68,9 @@ def _compute_tensor_center3d(tensor: Tensor) -> Tensor:
     if not 3 <= len(tensor.shape) <= 5:
         raise AssertionError(f"Must be a 3D tensor as DHW, CDHW and BCDHW. Got {tensor.shape}.")
     depth, height, width = tensor.shape[-3:]
-    center_x: float = float(width - 1) / 2
-    center_y: float = float(height - 1) / 2
-    center_z: float = float(depth - 1) / 2
-    center: Tensor = torch.tensor([center_x, center_y, center_z], device=tensor.device, dtype=tensor.dtype)
+    center = torch.tensor(
+        [(width - 1) / 2, (height - 1) / 2, (depth - 1) / 2], device=tensor.device, dtype=tensor.dtype
+    )
     return center
 
 
@@ -84,23 +83,10 @@ def _compute_rotation_matrix(angle: Tensor, center: Tensor) -> Tensor:
 
 def _compute_rotation_matrix3d(yaw: Tensor, pitch: Tensor, roll: Tensor, center: Tensor) -> Tensor:
     """Compute a pure affine rotation matrix."""
-    if len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 0:
-        yaw = yaw.unsqueeze(dim=0)
-        pitch = pitch.unsqueeze(dim=0)
-        roll = roll.unsqueeze(dim=0)
-
-    if len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 1:
-        yaw = yaw.unsqueeze(dim=1)
-        pitch = pitch.unsqueeze(dim=1)
-        roll = roll.unsqueeze(dim=1)
-
-    if not (len(yaw.shape) == len(pitch.shape) == len(roll.shape) == 2):
-        raise AssertionError(f"Expected yaw, pitch, roll to be (B, 1). Got {yaw.shape}, {pitch.shape}, {roll.shape}.")
-
-    angles: Tensor = torch.cat([yaw, pitch, roll], dim=1)
-    scales: Tensor = ones_like(yaw)
-    matrix: Tensor = get_projective_transform(center, angles, scales)
-    return matrix
+    yaw, pitch, roll = yaw.unsqueeze(dim=-1), pitch.unsqueeze(dim=-1), roll.unsqueeze(dim=-1)
+    angles = torch.cat([yaw, pitch, roll], dim=-1)
+    scales = torch.ones_like(yaw)
+    return get_projective_transform(center, angles, scales)
 
 
 def _compute_translation_matrix(translation: Tensor) -> Tensor:
@@ -193,47 +179,17 @@ def affine3d(
     padding_mode: str = "zeros",
     align_corners: bool = False,
 ) -> Tensor:
-    r"""Apply an affine transformation to the 3d volume.
-
-    Args:
-        tensor: The image tensor to be warped in shapes of
-            :math:`(D, H, W)`, :math:`(C, D, H, W)` and :math:`(B, C, D, H, W)`.
-        matrix: The affine transformation matrix with shape :math:`(B, 3, 4)`.
-        mode: interpolation mode to calculate output values
-          ``'bilinear'`` | ``'nearest'``.
-        padding_mode: padding mode for outside grid values
-         `` 'zeros'`` | ``'border'`` | ``'reflection'``.
-        align_corners: interpolation flag.
-
-    Returns:
-        The warped image.
-
-    Example:
-        >>> img = torch.rand(1, 2, 4, 3, 5)
-        >>> aff = torch.eye(3, 4)[None]
-        >>> out = affine3d(img, aff)
-        >>> print(out.shape)
-        torch.Size([1, 2, 4, 3, 5])
-
-    """
-    # warping needs data in the shape of BCDHW
-    is_unbatched: bool = tensor.ndimension() == 4
+    r"""Apply an affine transformation to the 3d volume."""
+    is_unbatched = tensor.ndimension() == 4
     if is_unbatched:
-        tensor = torch.unsqueeze(tensor, dim=0)
+        tensor = tensor.unsqueeze(dim=0)
 
-    # we enforce broadcasting since by default grid_sample it does not
-    # give support for that
     matrix = matrix.expand(tensor.shape[0], -1, -1)
+    d, h, w = tensor.shape[-3], tensor.shape[-2], tensor.shape[-1]
+    warped = warp_affine3d(tensor, matrix, (d, h, w), mode, padding_mode, align_corners)
 
-    # warp the input tensor
-    depth: int = tensor.shape[-3]
-    height: int = tensor.shape[-2]
-    width: int = tensor.shape[-1]
-    warped: Tensor = warp_affine3d(tensor, matrix, (depth, height, width), mode, padding_mode, align_corners)
-
-    # return in the original shape
     if is_unbatched:
-        warped = torch.squeeze(warped, dim=0)
+        warped = warped.squeeze(dim=0)
 
     return warped
 
@@ -317,60 +273,24 @@ def rotate3d(
     padding_mode: str = "zeros",
     align_corners: bool = False,
 ) -> Tensor:
-    r"""Rotate 3D the tensor anti-clockwise about the centre.
-
-    Args:
-        tensor: The image tensor to be warped in shapes of :math:`(B, C, D, H, W)`.
-        yaw: The yaw angle through which to rotate. The tensor
-          must have a shape of (B), where B is batch size.
-        pitch: The pitch angle through which to rotate. The tensor
-          must have a shape of (B), where B is batch size.
-        roll: The roll angle through which to rotate. The tensor
-          must have a shape of (B), where B is batch size.
-        center: The center through which to rotate. The tensor
-          must have a shape of (B, 2), where B is batch size and last
-          dimension contains cx and cy.
-        mode: interpolation mode to calculate output values
-          ``'bilinear'`` | ``'nearest'``.
-        padding_mode: padding mode for outside grid values
-          ``'zeros'`` | ``'border'`` | ``'reflection'``.
-        align_corners: interpolation flag.
-
-    Returns:
-        Tensor: The rotated tensor with shape as input.
-
-    """
-    if not isinstance(tensor, Tensor):
-        raise TypeError(f"Input tensor type is not a Tensor. Got {type(tensor)}")
-
-    if not isinstance(yaw, Tensor):
-        raise TypeError(f"yaw is not a Tensor. Got {type(yaw)}")
-
-    if not isinstance(pitch, Tensor):
-        raise TypeError(f"pitch is not a Tensor. Got {type(pitch)}")
-
-    if not isinstance(roll, Tensor):
-        raise TypeError(f"roll is not a Tensor. Got {type(roll)}")
+    r"""Rotate 3D the tensor anti-clockwise about the centre."""
+    if not all(map(lambda x: isinstance(x, Tensor), [tensor, yaw, pitch, roll])):
+        raise TypeError("Inputs must be tensor types.")
 
     if center is not None and not isinstance(center, Tensor):
         raise TypeError(f"Input center type is not a Tensor. Got {type(center)}")
 
     if len(tensor.shape) not in (4, 5):
-        raise ValueError(f"Invalid tensor shape, we expect CxDxHxW or BxCxDxHxW. Got: {tensor.shape}")
+        raise ValueError(f"Invalid tensor shape; expected CxDxHxW or BxCxDxHxW. Got: {tensor.shape}")
 
-    # compute the rotation center
     if center is None:
         center = _compute_tensor_center3d(tensor)
 
-    # compute the rotation matrix
-    # TODO: add broadcasting to get_rotation_matrix2d for center
-    yaw = yaw.expand(tensor.shape[0])
-    pitch = pitch.expand(tensor.shape[0])
-    roll = roll.expand(tensor.shape[0])
-    center = center.expand(tensor.shape[0], -1)
-    rotation_matrix: Tensor = _compute_rotation_matrix3d(yaw, pitch, roll, center)
+    batch_size = tensor.shape[0]
+    yaw, pitch, roll = yaw.expand(batch_size), pitch.expand(batch_size), roll.expand(batch_size)
+    center = center.expand(batch_size, -1)
+    rotation_matrix = _compute_rotation_matrix3d(yaw, pitch, roll, center)
 
-    # warp using the affine transform
     return affine3d(tensor, rotation_matrix[..., :3, :4], mode, padding_mode, align_corners)
 
 
