@@ -37,29 +37,7 @@ __all__ = [
 
 
 def compose_transformations(trans_01: Tensor, trans_12: Tensor) -> Tensor:
-    r"""Compose two homogeneous transformations.
-
-    .. math::
-        T_0^{2} = \begin{bmatrix} R_0^1 R_1^{2} & R_0^{1} t_1^{2} + t_0^{1} \\
-        \mathbf{0} & 1\end{bmatrix}
-
-    Args:
-        trans_01: tensor with the homogeneous transformation from
-          a reference frame 1 respect to a frame 0. The tensor has must have a
-          shape of :math:`(N, 4, 4)` or :math:`(4, 4)`.
-        trans_12: tensor with the homogeneous transformation from
-          a reference frame 2 respect to a frame 1. The tensor has must have a
-          shape of :math:`(N, 4, 4)` or :math:`(4, 4)`.
-
-    Returns:
-        the transformation between the two frames with shape :math:`(N, 4, 4)` or :math:`(4, 4)`.
-
-    Example::
-        >>> trans_01 = torch.eye(4)  # 4x4
-        >>> trans_12 = torch.eye(4)  # 4x4
-        >>> trans_02 = compose_transformations(trans_01, trans_12)  # 4x4
-
-    """
+    r"""Compose two homogeneous transformations."""
     KORNIA_CHECK_IS_TENSOR(trans_01)
     KORNIA_CHECK_IS_TENSOR(trans_12)
 
@@ -83,10 +61,12 @@ def compose_transformations(trans_01: Tensor, trans_12: Tensor) -> Tensor:
     tvec_02: Tensor = torch.matmul(rmat_01, tvec_12) + tvec_01
 
     # pack output tensor
-    trans_02: Tensor = zeros_like(trans_01)
-    trans_02[..., :3, 0:3] += rmat_02
-    trans_02[..., :3, -1:] += tvec_02
-    trans_02[..., -1, -1:] += 1.0
+    # Optimized: Instead of zeros_like, we directly clone and modify trans_01
+    trans_02: Tensor = trans_01.clone()
+    trans_02[..., :3, :3] = rmat_02
+    trans_02[..., :3, -1:] = tvec_02
+    trans_02[..., -1, -1] = 1.0  # Directly setting the last element
+
     return trans_02
 
 
