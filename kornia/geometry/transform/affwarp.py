@@ -122,11 +122,16 @@ def _compute_scaling_matrix(scale: Tensor, center: Tensor) -> Tensor:
 
 def _compute_shear_matrix(shear: Tensor) -> Tensor:
     """Compute affine matrix for shearing."""
+    # Create a 3x3 identity like matrix using the optimized eye_like function
     matrix: Tensor = eye_like(3, shear, shared_memory=False)
 
+    # Split the shear tensor into two separate tensors for x and y shearing
     shx, shy = torch.chunk(shear, chunks=2, dim=-1)
-    matrix[..., 0, 1:2] += shx
-    matrix[..., 1, 0:1] += shy
+
+    # Efficiently adding shearing values to the identity matrix to form the resulting shear matrix
+    matrix[..., 0, 1] = shx.squeeze(-1)
+    matrix[..., 1, 0] = shy.squeeze(-1)
+
     return matrix
 
 
