@@ -365,16 +365,21 @@ def bbox_generator(
             f"`width`({width.device}), `height`({height.device})."
         )
 
-    bbox = torch.tensor([[[0, 0], [0, 0], [0, 0], [0, 0]]], device=x_start.device, dtype=x_start.dtype).repeat(
-        1 if x_start.dim() == 0 else len(x_start), 1, 1
-    )
+    if x_start.dim() == 0:
+        x_start = x_start.unsqueeze(0)
+        y_start = y_start.unsqueeze(0)
+        width = width.unsqueeze(0)
+        height = height.unsqueeze(0)
 
-    bbox[:, :, 0] += x_start.view(-1, 1)
-    bbox[:, :, 1] += y_start.view(-1, 1)
-    bbox[:, 1, 0] += width - 1
-    bbox[:, 2, 0] += width - 1
-    bbox[:, 2, 1] += height - 1
-    bbox[:, 3, 1] += height - 1
+    x1 = x_start + width - 1
+    y1 = y_start + height - 1
+
+    bbox = torch.stack([
+        torch.stack([x_start, y_start], dim=1),
+        torch.stack([x1, y_start], dim=1),
+        torch.stack([x1, y1], dim=1),
+        torch.stack([x_start, y1], dim=1),
+    ], dim=1)
 
     return bbox
 

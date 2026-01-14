@@ -77,11 +77,12 @@ class ResizeGenerator(RandomGeneratorBase):
         input_size = h, w = (batch_shape[-2], batch_shape[-1])
 
         src = bbox_generator(
-            torch.tensor(0, device=_device, dtype=_dtype),
-            torch.tensor(0, device=_device, dtype=_dtype),
-            torch.tensor(input_size[1], device=_device, dtype=_dtype),
-            torch.tensor(input_size[0], device=_device, dtype=_dtype),
-        ).repeat(batch_size, 1, 1)
+            torch.full((batch_size,), 0, device=_device, dtype=_dtype),
+            torch.full((batch_size,), 0, device=_device, dtype=_dtype),
+            torch.full((batch_size,), input_size[1], device=_device, dtype=_dtype),
+            torch.full((batch_size,), input_size[0], device=_device, dtype=_dtype),
+        )
+
 
         if isinstance(self.output_size, int):
             aspect_ratio = w / h
@@ -99,11 +100,12 @@ class ResizeGenerator(RandomGeneratorBase):
             raise AssertionError(f"`resize_to` must be a tuple of 2 positive integers. Got {output_size}.")
 
         dst = bbox_generator(
-            torch.tensor(0, device=_device, dtype=_dtype),
-            torch.tensor(0, device=_device, dtype=_dtype),
-            torch.tensor(output_size[1], device=_device, dtype=_dtype),
-            torch.tensor(output_size[0], device=_device, dtype=_dtype),
-        ).repeat(batch_size, 1, 1)
+            torch.full((batch_size,), 0, device=_device, dtype=_dtype),
+            torch.full((batch_size,), 0, device=_device, dtype=_dtype),
+            torch.full((batch_size,), output_size[1], device=_device, dtype=_dtype),
+            torch.full((batch_size,), output_size[0], device=_device, dtype=_dtype),
+        )
+
 
         _input_size = torch.tensor(input_size, device=_device, dtype=torch.long).expand(batch_size, -1)
         _output_size = torch.tensor(output_size, device=_device, dtype=torch.long).expand(batch_size, -1)
